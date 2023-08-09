@@ -27,6 +27,7 @@
     "class-validator": "^0.14.0",
     "faker": "^6.6.6",
     "helmet": "^6.0.1",
+    "node-cache": "^5.1.2",
     "pg": "^8.9.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.0",

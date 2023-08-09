@@ -24,22 +24,29 @@ import {
   BookingResponseDto,
 } from './booking.contracts';
 import { BookingModel } from './booking.model';
-
+import NodeCache from 'node-cache';
 import { BookingService } from './booking.service';
 
 @ApiTags('bookings')
 @Controller('bookings')
 export class BookingController {
-  constructor(private readonly bookingService: BookingService) {}
+  myCache: NodeCache;
+  constructor(private readonly bookingService: BookingService) {
+    this.myCache = new NodeCache({ stdTTL: 100, checkperiod: 120 });
+  }
 
   @ApiOkResponse({ type: AllBookingResponseContract })
   @Get()
   @UseInterceptors(new FlakeyApiInterceptor(0.9))
   async findAll(): Promise<AllBookingResponseContract> {
-    const bookings = await this.bookingService.findAllBookings();
+    let bookings = this.myCache.get('allBookings');
+    if (!bookings) {
+      bookings = await this.bookingService.findAllBookings();
+      this.myCache.set('allBookings', bookings, 10000);
+    }
 
     return {
-      data: bookings.map((booking) => ({
+      data: (bookings as any).map((booking) => ({
         id: booking.id,
         user: booking.user,
         parc: booking.parc,
@@ -52,13 +59,11 @@ export class BookingController {
   @ApiCreatedResponse({ type: AllBookingResponseContract })
   @ApiBadRequestResponse()
   @Post()
-  async create(
-    @Body() payload
-  ): Promise<BookingResponseDto> {
+  async create(@Body() payload): Promise<BookingResponseDto> {
     // create new booking
     const booking = await this.bookingService.newBooking({
       ...payload,
-      id: uuid()
+      id: uuid(),
     } as BookingModel);
 
     return booking;
@@ -69,7 +74,11 @@ export class BookingController {
   @ApiBadRequestResponse()
   @ApiNotFoundResponse()
   async getBooking(@Param('id') id: string): Promise<BookingResponseDto> {
-    const booking = await this.bookingService.getBookingById(id);
+    let booking: BookingResponseDto = this.myCache.get(`booking-${id}`);
+    if (!booking) {
+      booking = await this.bookingService.getBookingById(id);
+      this.myCache.set(`booking-${id}`, booking, 10000);
+    }
 
     if (!booking) {
       throw new NotFoundException('Booking not found');

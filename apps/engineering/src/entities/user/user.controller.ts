@@ -25,20 +25,28 @@ import {
 import { UserModel } from './user.model';
 import { UserService } from './user.service';
 import { uuid } from 'uuidv4';
+import NodeCache from 'node-cache';
 
 @ApiTags('users')
 @Controller('users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  myCache: NodeCache;
+  constructor(private readonly userService: UserService) {
+    this.myCache = new NodeCache({ stdTTL: 100, checkperiod: 120 });
+  }
 
   @ApiOkResponse({ type: AllUserResponseContract })
   @Get()
   @UseInterceptors(new FlakeyApiInterceptor(0.9))
   async findAll(): Promise<AllUserResponseContract> {
-    const users = await this.userService.findAll();
+    let users = this.myCache.get(`allUsers`);
+    if (!users) {
+      users = await this.userService.findAll();
+      this.myCache.set('allUsers', users, 10000);
+    }
 
     return {
-      data: users.map((user) => ({
+      data: (users as any).map((user) => ({
         id: user.id,
         name: user.name,
         email: user.email,
@@ -69,7 +77,11 @@ export class UserController {
   @ApiBadRequestResponse()
   @ApiNotFoundResponse()
   async getUser(@Param('id') id: string): Promise<UserResponseDto> {
-    const user = await this.userService.getById(id);
+    let user: UserResponseDto = this.myCache.get(`user-${id}`);
+    if (!user) {
+      user = await this.userService.getById(id);
+      this.myCache.set(`user-${id}`, user, 10000);
+    }
 
     if (!user) {
       throw new NotFoundException('User not found');
